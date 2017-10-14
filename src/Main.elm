@@ -244,7 +244,10 @@ skillNameText name =
 
 skillName : String -> Maybe SkillName
 skillName key =
-    Dict.get key (Dict.fromList skillsMap)
+    skillsMap
+        |> List.map (\( k, v ) -> ( String.toLower k, v ))
+        |> Dict.fromList
+        |> Dict.get (String.toLower key)
 
 
 skillsMap : List ( String, SkillName )
