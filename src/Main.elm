@@ -1,19 +1,28 @@
 module Main exposing (..)
 
 import Html exposing (..)
+import Html.Events exposing (..)
 
 
 type alias Model =
-    String
+    { skills : List String
+    , newSkill : Maybe String
+    }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( "", Cmd.none )
+    ( { skills = []
+      , newSkill = Nothing
+      }
+    , Cmd.none
+    )
 
 
 type Msg
     = NoOp
+    | EditSkill String
+    | AddSkill
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -22,11 +31,38 @@ update msg model =
         NoOp ->
             ( model, Cmd.none )
 
+        EditSkill skill ->
+            ( { model
+                | newSkill =
+                    if skill == "" then
+                        Nothing
+                    else
+                        Just skill
+              }
+            , Cmd.none
+            )
+
+        AddSkill ->
+            case model.newSkill of
+                Nothing ->
+                    ( model, Cmd.none )
+
+                Just skill ->
+                    ( { model
+                        | skills = List.sort <| skill :: model.skills
+                        , newSkill = Nothing
+                      }
+                    , Cmd.none
+                    )
+
 
 view : Model -> Html Msg
 view model =
     div []
-        [ text model ]
+        [ ul [] (List.map (\s -> option [] [ text s ]) model.skills)
+        , input [ onInput EditSkill ] []
+        , button [ onClick AddSkill ] [ text "Add Skill" ]
+        ]
 
 
 main : Program Never Model Msg
