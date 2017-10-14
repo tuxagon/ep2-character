@@ -4,6 +4,71 @@ import Html exposing (..)
 import Html.Events exposing (..)
 
 
+type SkillCategory
+    = Combat
+    | Mental
+    | Physical
+    | Psi
+    | Social
+    | Technical
+    | Vehicle
+
+
+type SkillKind
+    = Know
+    | Active SkillCategory
+
+
+type Aptitude
+    = Cognition
+    | Intuition
+    | Reflexes
+    | Savvy
+    | Somatics
+    | Willpower
+
+
+type alias Field =
+    String
+
+
+type SkillName
+    = Athletics
+    | Deceive
+    | Exotic Field
+    | Fray
+    | FreeFall
+    | Guns
+    | Hardware Field
+    | Infiltrate
+    | Infosec
+    | Interface
+    | Kinesics
+    | Know_ Field
+    | Medicine Field
+    | Melee
+    | Perceive
+    | Persuade
+    | Pilot Field
+    | Program
+    | Provoke
+    | Psi_
+    | Research
+    | Survival
+
+
+type alias SkillInformation =
+    { aptitude : Aptitude
+    , baseStat : Int
+    , kind : SkillKind
+    , specializations : List String
+    }
+
+
+type Skill
+    = Skill SkillName SkillInformation
+
+
 type alias Model =
     { skills : List String
     , newSkill : Maybe String
