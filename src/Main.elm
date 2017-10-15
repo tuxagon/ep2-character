@@ -153,7 +153,7 @@ view : Model -> Html Msg
 view model =
     let
         viewSkill (Skill name info) =
-            option [] [ text <| skillNameText name ]
+            li [] [ text <| skillNameText name ]
     in
         div []
             [ ul [] (List.map viewSkill model.skills)
