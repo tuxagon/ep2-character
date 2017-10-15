@@ -1,16 +1,11 @@
 module Main exposing (..)
 
-import Color
 import Dict exposing (Dict)
 import EclipsePhase2.Styles as Styles exposing (Styles)
 import Element exposing (..)
-import Element.Attributes as Attr
 import Element.Events as Evt
 import Element.Input as Input
 import Html exposing (Html)
-import Style exposing (..)
-import Style.Border as Border
-import Style.Color as Color
 
 
 type SkillCategory
