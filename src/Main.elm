@@ -1,8 +1,16 @@
 module Main exposing (..)
 
+import Color
 import Dict exposing (Dict)
-import Html exposing (..)
-import Html.Events exposing (..)
+import EclipsePhase2.Styles as Styles exposing (Styles)
+import Element exposing (..)
+import Element.Attributes as Attr
+import Element.Events as Evt
+import Element.Input as Input
+import Html exposing (Html)
+import Style exposing (..)
+import Style.Border as Border
+import Style.Color as Color
 
 
 type SkillCategory
@@ -73,6 +81,7 @@ type Skill
 type alias Model =
     { skills : List Skill
     , newSkill : Maybe String
+    , count : Int
     }
 
 
@@ -80,6 +89,7 @@ init : ( Model, Cmd Msg )
 init =
     ( { skills = []
       , newSkill = Nothing
+      , count = 0
       }
     , Cmd.none
     )
@@ -144,6 +154,7 @@ update msg model =
                         ( { model
                             | skills = updatedSkills
                             , newSkill = Nothing
+                            , count = model.count + 1
                           }
                         , Cmd.none
                         )
@@ -151,15 +162,80 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
+    Element.layout Styles.stylesheet <|
+        column Styles.None
+            []
+            [ viewSkills model.skills
+            , viewSkillForm model
+            ]
+
+
+viewSkills : List Skill -> Element Styles variation Msg
+viewSkills skills =
     let
         viewSkill (Skill name info) =
-            li [] [ text <| skillNameText name ]
+            el Styles.None
+                []
+                (text <| skillNameText name)
     in
-        div []
-            [ ul [] (List.map viewSkill model.skills)
-            , input [ onInput EditSkill ] []
-            , button [ onClick AddSkill ] [ text "Add Skill" ]
+        column Styles.None
+            []
+            (List.map viewSkill skills)
+
+
+viewSkillForm : Model -> Element Styles variation Msg
+viewSkillForm model =
+    let
+        text_ =
+            case model.newSkill of
+                Nothing ->
+                    ""
+
+                Just val ->
+                    val
+    in
+        column Styles.None
+            []
+            [ Input.text Styles.None
+                []
+                { onChange = EditSkill
+                , value = text_
+                , label = Input.hiddenLabel "Skill"
+                , options =
+                    [ Input.textKey (toString model.count)
+                    ]
+                }
+            , button Styles.None [ Evt.onClick AddSkill ] (text "Add Skill")
             ]
+
+
+
+-- view : Model -> Html Msg
+-- view model =
+--     let
+--         viewSkill (Skill name info) =
+--             li [] [ text <| skillNameText name ]
+--     in
+--         div []
+--             [ ul [] (List.map viewSkill model.skills)
+--             , viewSkillForm model
+--             , button [ onClick AddSkill ] [ text "Add Skill" ]
+--             ]
+-- viewSkillForm : Model -> Html Msg
+-- viewSkillForm model =
+--     let
+--         viewSkillOption : ( String, SkillName ) -> Html Msg
+--         viewSkillOption ( key, val ) =
+--             option
+--                 []
+--                 [ text key ]
+--     in
+--         div []
+--             [ select
+--                 []
+--                 (List.map viewSkillOption skillsMap)
+--             , input [ onInput EditSkill ] []
+--             ]
 
 
 main : Program Never Model Msg
