@@ -95,23 +95,33 @@ init =
     )
 
 
-buildSkill : String -> Maybe Skill
-buildSkill skill =
+buildSkill : String -> Aptitude -> Maybe Skill
+buildSkill skill aptitude =
     case skillName skill of
         Nothing ->
             Nothing
 
         Just name ->
-            Just <| Skill name initSkillInformation
+            Just <| Skill name <| initSkillInformation aptitude
 
 
-initSkillInformation : SkillInformation
-initSkillInformation =
-    { aptitude = Cognition
+initSkillInformation : Aptitude -> SkillInformation
+initSkillInformation aptitude =
+    { aptitude = aptitude
     , baseStat = 0
     , kind = Know
     , specializations = []
     }
+
+
+defaultSkillName : SkillName
+defaultSkillName =
+    Athletics
+
+
+defaultAptitude : Aptitude
+defaultAptitude =
+    Cognition
 
 
 type Msg
@@ -145,20 +155,34 @@ update msg model =
                     Maybe.withDefault "" model.skillField
 
                 good =
-                    hasField field
+                    not (requiresField selectedSkillName)
+                        || (requiresField selectedSkillName && hasField field)
 
-                selected =
-                    Maybe.withDefault Athletics <|
+                selectedSkillName : SkillName
+                selectedSkillName =
+                    Maybe.withDefault defaultSkillName <|
                         Input.selected model.skillSearch
 
+                selectedAptitude : Aptitude
+                selectedAptitude =
+                    case selectedSkillName of
+                        Exotic _ ->
+                            Maybe.withDefault
+                                (skillAptitude selectedSkillName defaultAptitude)
+                            <|
+                                Input.selected model.aptitudeMenu
+
+                        name ->
+                            skillAptitude name defaultAptitude
+
                 config =
-                    { aptitude = skillAptitude selected Somatics
+                    { aptitude = selectedAptitude
                     , field = field
                     }
 
                 updatedSkills =
                     model.skills
-                        |> (++) [ (newSkill selected config) ]
+                        |> (++) [ (newSkill selectedSkillName config) ]
                         |> List.sortBy (\(Skill name _) -> skillNameText name)
             in
                 if good then
@@ -199,36 +223,58 @@ hasField field =
         |> not
 
 
+requiresField : SkillName -> Bool
+requiresField name =
+    case name of
+        Exotic _ ->
+            True
+
+        Hardware _ ->
+            True
+
+        Know_ _ ->
+            True
+
+        Medicine _ ->
+            True
+
+        Pilot _ ->
+            True
+
+        _ ->
+            False
+
+
 newSkill : SkillName -> { aptitude : Aptitude, field : Field } -> Skill
 newSkill name config =
     let
+        skillInfo =
+            initSkillInformation config.aptitude
+
         noField =
-            Skill name
+            Skill name skillInfo
 
         withField =
-            Skill (joinSkillName ( name, config.field ))
-
-        withFieldDefault =
-            withField { initSkillInformation | aptitude = Cognition }
+            Skill (joinSkillName ( name, config.field )) skillInfo
     in
         case name of
             Exotic _ ->
-                withField { initSkillInformation | aptitude = config.aptitude }
+                withField
 
             Hardware _ ->
-                withFieldDefault
+                withField
 
             Know_ _ ->
-                withFieldDefault
+                withField
 
             Medicine _ ->
-                withFieldDefault
+                withField
 
             Pilot _ ->
-                withFieldDefault
+                withField
 
             _ ->
-                noField initSkillInformation
+                noField
 
 
 view : Model -> Html Msg
