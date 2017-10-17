@@ -3,7 +3,8 @@ module Main exposing (..)
 import Dict exposing (Dict)
 import EclipsePhase2.Styles as Styles exposing (Styles)
 import Element exposing (..)
-import Element.Events as Evt
+import Element.Attributes exposing (..)
+import Element.Events exposing (..)
 import Element.Input as Input
 import Html exposing (Html)
 
@@ -75,16 +76,20 @@ type Skill
 
 type alias Model =
     { skills : List Skill
-    , newSkill : Maybe String
+    , skillField : Maybe String
+    , aptitudeMenu : Input.SelectWith Aptitude Msg
     , count : Int
+    , skillSearch : Input.SelectWith SkillName Msg
     }
 
 
 init : ( Model, Cmd Msg )
 init =
     ( { skills = []
-      , newSkill = Nothing
+      , skillField = Nothing
+      , aptitudeMenu = Input.dropMenu Nothing ChooseAptitude
       , count = 0
+      , skillSearch = Input.autocomplete Nothing Search
       }
     , Cmd.none
     )
@@ -97,16 +102,24 @@ buildSkill skill =
             Nothing
 
         Just name ->
-            Just <|
-                Skill
-                    name
-                    { aptitude = Cognition, baseStat = 0, kind = Know, specializations = [] }
+            Just <| Skill name initSkillInformation
+
+
+initSkillInformation : SkillInformation
+initSkillInformation =
+    { aptitude = Cognition
+    , baseStat = 0
+    , kind = Know
+    , specializations = []
+    }
 
 
 type Msg
     = NoOp
     | EditSkill String
     | AddSkill
+    | Search (Input.SelectMsg SkillName)
+    | ChooseAptitude (Input.SelectMsg Aptitude)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -117,8 +130,8 @@ update msg model =
 
         EditSkill skill ->
             ( { model
-                | newSkill =
-                    if skill == "" then
+                | skillField =
+                    if String.trim skill == "" then
                         Nothing
                     else
                         Just skill
@@ -127,32 +140,95 @@ update msg model =
             )
 
         AddSkill ->
-            case model.newSkill of
-                Nothing ->
+            let
+                field =
+                    Maybe.withDefault "" model.skillField
+
+                good =
+                    hasField field
+
+                selected =
+                    Maybe.withDefault Athletics <|
+                        Input.selected model.skillSearch
+
+                config =
+                    { aptitude = skillAptitude selected Somatics
+                    , field = field
+                    }
+
+                updatedSkills =
+                    model.skills
+                        |> (++) [ (newSkill selected config) ]
+                        |> List.sortBy (\(Skill name _) -> skillNameText name)
+            in
+                if good then
+                    ( { model
+                        | skills = updatedSkills
+                        , skillField = Nothing
+                        , count = model.count + 1
+                      }
+                    , Cmd.none
+                    )
+                else
                     ( model, Cmd.none )
 
-                Just skill ->
-                    let
-                        skill_ =
-                            case buildSkill skill of
-                                Nothing ->
-                                    []
+        Search searchMsg ->
+            let
+                updatedSearch =
+                    Input.updateSelection searchMsg model.skillSearch
+            in
+                ( { model
+                    | skillSearch = updatedSearch
+                  }
+                , Cmd.none
+                )
 
-                                Just skill__ ->
-                                    [ skill__ ]
+        ChooseAptitude chooseMsg ->
+            ( { model
+                | aptitudeMenu = Input.updateSelection chooseMsg model.aptitudeMenu
+              }
+            , Cmd.none
+            )
 
-                        updatedSkills =
-                            List.sortBy (\(Skill name _) -> skillNameText name) <|
-                                skill_
-                                    ++ model.skills
-                    in
-                        ( { model
-                            | skills = updatedSkills
-                            , newSkill = Nothing
-                            , count = model.count + 1
-                          }
-                        , Cmd.none
-                        )
+
+hasField : Field -> Bool
+hasField field =
+    field
+        |> String.trim
+        |> String.isEmpty
+        |> not
+
+
+newSkill : SkillName -> { aptitude : Aptitude, field : Field } -> Skill
+newSkill name config =
+    let
+        noField =
+            Skill name
+
+        withField =
+            Skill (joinSkillName ( name, config.field ))
+
+        withFieldDefault =
+            withField { initSkillInformation | aptitude = Cognition }
+    in
+        case name of
+            Exotic _ ->
+                withField { initSkillInformation | aptitude = config.aptitude }
+
+            Hardware _ ->
+                withFieldDefault
+
+            Know_ _ ->
+                withFieldDefault
+
+            Medicine _ ->
+                withFieldDefault
+
+            Pilot _ ->
+                withFieldDefault
+
+            _ ->
+                noField initSkillInformation
 
 
 view : Model -> Html Msg
@@ -167,70 +243,120 @@ view model =
 
 viewSkills : List Skill -> Element Styles variation Msg
 viewSkills skills =
+    column Styles.None
+        []
+        (List.map viewSkill skills)
+
+
+viewSkill : Skill -> Element Styles variation Msg
+viewSkill (Skill name info) =
     let
-        viewSkill (Skill name info) =
-            el Styles.None
-                []
-                (text <| skillNameText name)
+        skillText =
+            skillNameText name
+
+        aptitudeText =
+            toCode info.aptitude
     in
-        column Styles.None
+        el Styles.None
             []
-            (List.map viewSkill skills)
+            (text <| skillText ++ " (" ++ aptitudeText ++ ")")
 
 
 viewSkillForm : Model -> Element Styles variation Msg
 viewSkillForm model =
     let
-        text_ =
-            case model.newSkill of
-                Nothing ->
-                    ""
-
-                Just val ->
-                    val
+        viewChoice ( key, val ) =
+            Input.choice val (text key)
     in
-        column Styles.None
-            []
-            [ Input.text Styles.None
+        row Styles.None
+            [ width (percent 50) ]
+            (List.concat
+                [ [ Input.select Styles.Border
+                        []
+                        { label = Input.hiddenLabel "Skill"
+                        , with = model.skillSearch
+                        , options = []
+                        , max = List.length skillsMap
+                        , menu =
+                            Input.menu Styles.None
+                                []
+                                (List.map viewChoice skillsMap)
+                        }
+                  ]
+                , viewSkillFormInput model <|
+                    Maybe.withDefault Athletics
+                        (Input.selected model.skillSearch)
+                , [ button Styles.None
+                        [ onClick AddSkill
+                        , alignLeft
+                        ]
+                        (text "Add Skill")
+                  ]
+                ]
+            )
+
+
+viewSkillFormInput : Model -> SkillName -> List (Element Styles variation Msg)
+viewSkillFormInput model name =
+    let
+        aptitudeChoice aptitude =
+            Input.choice aptitude (text <| toCode aptitude)
+
+        noField =
+            [ empty ]
+
+        withField =
+            [ Input.text Styles.Border
                 []
                 { onChange = EditSkill
-                , value = text_
-                , label = Input.hiddenLabel "Skill"
+                , value = Maybe.withDefault "" model.skillField
+                , label = Input.hiddenLabel "Field"
                 , options =
                     [ Input.textKey (toString model.count)
                     ]
                 }
-            , button Styles.None [ Evt.onClick AddSkill ] (text "Add Skill")
             ]
 
+        withFieldAndAptitudes =
+            withField
+                ++ [ (Input.select Styles.Border
+                        []
+                        { label = Input.hiddenLabel "Aptitude"
+                        , with = model.aptitudeMenu
+                        , options = []
+                        , max = 6
+                        , menu =
+                            Input.menu Styles.Border
+                                []
+                                [ aptitudeChoice Cognition
+                                , aptitudeChoice Intuition
+                                , aptitudeChoice Reflexes
+                                , aptitudeChoice Savvy
+                                , aptitudeChoice Somatics
+                                , aptitudeChoice Willpower
+                                ]
+                        }
+                     )
+                   ]
+    in
+        case name of
+            Exotic _ ->
+                withFieldAndAptitudes
 
+            Hardware _ ->
+                withField
 
--- view : Model -> Html Msg
--- view model =
---     let
---         viewSkill (Skill name info) =
---             li [] [ text <| skillNameText name ]
---     in
---         div []
---             [ ul [] (List.map viewSkill model.skills)
---             , viewSkillForm model
---             , button [ onClick AddSkill ] [ text "Add Skill" ]
---             ]
--- viewSkillForm : Model -> Html Msg
--- viewSkillForm model =
---     let
---         viewSkillOption : ( String, SkillName ) -> Html Msg
---         viewSkillOption ( key, val ) =
---             option
---                 []
---                 [ text key ]
---     in
---         div []
---             [ select
---                 []
---                 (List.map viewSkillOption skillsMap)
---             , input [ onInput EditSkill ] []
---             ]
+            Know_ _ ->
+                withField
+
+            Medicine _ ->
+                withField
+
+            Pilot _ ->
+                withField
+
+            _ ->
+                noField
 
 
 main : Program Never Model Msg
@@ -241,6 +367,98 @@ main =
         , view = view
         , subscriptions = \_ -> Sub.none
         }
+
+
+joinSkillName : ( SkillName, Field ) -> SkillName
+joinSkillName ( name, field ) =
+    case name of
+        Exotic _ ->
+            Exotic field
+
+        Hardware _ ->
+            Hardware field
+
+        Know_ _ ->
+            Know_ field
+
+        Medicine _ ->
+            Medicine field
+
+        Pilot _ ->
+            Pilot field
+
+        _ ->
+            name
+
+
+skillAptitude : SkillName -> Aptitude -> Aptitude
+skillAptitude name default =
+    case name of
+        Athletics ->
+            Somatics
+
+        Deceive ->
+            Savvy
+
+        Exotic _ ->
+            default
+
+        Fray ->
+            Reflexes
+
+        FreeFall ->
+            Somatics
+
+        Guns ->
+            Reflexes
+
+        Hardware _ ->
+            Cognition
+
+        Infiltrate ->
+            Reflexes
+
+        Infosec ->
+            Cognition
+
+        Interface ->
+            Cognition
+
+        Kinesics ->
+            Savvy
+
+        Know_ _ ->
+            Cognition
+
+        Medicine _ ->
+            Cognition
+
+        Melee ->
+            Somatics
+
+        Perceive ->
+            Intuition
+
+        Persuade ->
+            Savvy
+
+        Pilot _ ->
+            Reflexes
+
+        Program ->
+            Cognition
+
+        Provoke ->
+            Savvy
+
+        Psi_ ->
+            Willpower
+
+        Research ->
+            Intuition
+
+        Survival ->
+            Intuition
 
 
 skillNameText : SkillName -> String
@@ -346,3 +564,50 @@ skillsMap =
     , ( "Research", Research )
     , ( "Survival", Survival )
     ]
+
+
+toCode : Aptitude -> String
+toCode aptitude =
+    case aptitude of
+        Cognition ->
+            "COG"
+
+        Intuition ->
+            "INT"
+
+        Reflexes ->
+            "REF"
+
+        Savvy ->
+            "SAV"
+
+        Somatics ->
+            "SOM"
+
+        Willpower ->
+            "WIL"
+
+
+fromCode : String -> Maybe Aptitude
+fromCode code =
+    case code of
+        "COG" ->
+            Just Cognition
+
+        "INT" ->
+            Just Intuition
+
+        "REF" ->
+            Just Reflexes
+
+        "SAV" ->
+            Just Savvy
+
+        "SOM" ->
+            Just Somatics
+
+        "WIL" ->
+            Just Willpower
+
+        _ ->
+            Nothing
