@@ -1,6 +1,7 @@
 module Main exposing (..)
 
-import Dict exposing (Dict)
+import EclipsePhase2.Aptitude as Aptitude exposing (Aptitude)
+import EclipsePhase2.Skill as Skill exposing (Skill)
 import EclipsePhase2.Styles as Styles exposing (Styles)
 import Element exposing (..)
 import Element.Attributes exposing (..)
@@ -9,77 +10,12 @@ import Element.Input as Input
 import Html exposing (Html)
 
 
-type SkillCategory
-    = Combat
-    | Mental
-    | Physical
-    | Psi
-    | Social
-    | Technical
-    | Vehicle
-
-
-type SkillKind
-    = Know
-    | Active SkillCategory
-
-
-type Aptitude
-    = Cognition
-    | Intuition
-    | Reflexes
-    | Savvy
-    | Somatics
-    | Willpower
-
-
-type alias Field =
-    String
-
-
-type SkillName
-    = Athletics
-    | Deceive
-    | Exotic Field
-    | Fray
-    | FreeFall
-    | Guns
-    | Hardware Field
-    | Infiltrate
-    | Infosec
-    | Interface
-    | Kinesics
-    | Know_ Field
-    | Medicine Field
-    | Melee
-    | Perceive
-    | Persuade
-    | Pilot Field
-    | Program
-    | Provoke
-    | Psi_
-    | Research
-    | Survival
-
-
-type alias SkillInformation =
-    { aptitude : Aptitude
-    , baseStat : Int
-    , kind : SkillKind
-    , specializations : List String
-    }
-
-
-type Skill
-    = Skill SkillName SkillInformation
-
-
 type alias Model =
     { skills : List Skill
     , skillField : Maybe String
     , aptitudeMenu : Input.SelectWith Aptitude Msg
     , count : Int
-    , skillSearch : Input.SelectWith SkillName Msg
+    , skillSearch : Input.SelectWith Skill.Name Msg
     }
 
 
@@ -97,38 +33,20 @@ init =
 
 buildSkill : String -> Aptitude -> Maybe Skill
 buildSkill skill aptitude =
-    case skillName skill of
+    case Skill.nameFromString skill of
         Nothing ->
             Nothing
 
         Just name ->
-            Just <| Skill name <| initSkillInformation aptitude
-
-
-initSkillInformation : Aptitude -> SkillInformation
-initSkillInformation aptitude =
-    { aptitude = aptitude
-    , baseStat = 0
-    , kind = Know
-    , specializations = []
-    }
-
-
-defaultSkillName : SkillName
-defaultSkillName =
-    Athletics
-
-
-defaultAptitude : Aptitude
-defaultAptitude =
-    Cognition
+            -- Referring to specific union type which should be abstracted
+            Just (Skill.init name <| Skill.initInformation Skill.Know_ aptitude)
 
 
 type Msg
     = NoOp
     | EditSkill String
     | AddSkill
-    | Search (Input.SelectMsg SkillName)
+    | Search (Input.SelectMsg Skill.Name)
     | ChooseAptitude (Input.SelectMsg Aptitude)
 
 
@@ -150,30 +68,30 @@ update msg model =
             )
 
         AddSkill ->
+            -- This is a mess...
             let
                 field =
                     Maybe.withDefault "" model.skillField
 
                 good =
-                    not (requiresField selectedSkillName)
-                        || (requiresField selectedSkillName && hasField field)
+                    not (Skill.requiresField selectedSkillName)
+                        || (Skill.requiresField selectedSkillName && hasField field)
 
-                selectedSkillName : SkillName
                 selectedSkillName =
-                    Maybe.withDefault defaultSkillName <|
+                    Maybe.withDefault Skill.defaultName <|
                         Input.selected model.skillSearch
 
-                selectedAptitude : Aptitude
                 selectedAptitude =
+                    -- Referring to specific union type which should be abstracted
                     case selectedSkillName of
-                        Exotic _ ->
+                        Skill.Exotic _ ->
                             Maybe.withDefault
-                                (skillAptitude selectedSkillName defaultAptitude)
+                                (Skill.linkedAptitude Aptitude.default selectedSkillName)
                             <|
                                 Input.selected model.aptitudeMenu
 
                         name ->
-                            skillAptitude name defaultAptitude
+                            Skill.linkedAptitude Aptitude.default name
 
                 config =
                     { aptitude = selectedAptitude
@@ -183,7 +101,10 @@ update msg model =
                 updatedSkills =
                     model.skills
                         |> (++) [ (newSkill selectedSkillName config) ]
-                        |> List.sortBy (\(Skill name _) -> skillNameText name)
+                        |> List.sortBy
+                            (\(Skill.Skill name _) ->
+                                Skill.nameToString name
+                            )
             in
                 if good then
                     ( { model
@@ -215,7 +136,7 @@ update msg model =
             )
 
 
-hasField : Field -> Bool
+hasField : Skill.Field -> Bool
 hasField field =
     field
         |> String.trim
@@ -223,54 +144,32 @@ hasField field =
         |> not
 
 
-requiresField : SkillName -> Bool
-requiresField name =
-    case name of
-        Exotic _ ->
-            True
-
-        Hardware _ ->
-            True
-
-        Know_ _ ->
-            True
-
-        Medicine _ ->
-            True
-
-        Pilot _ ->
-            True
-
-        _ ->
-            False
-
-
-newSkill : SkillName -> { aptitude : Aptitude, field : Field } -> Skill
+newSkill : Skill.Name -> { aptitude : Aptitude, field : Skill.Field } -> Skill
 newSkill name config =
     let
         skillInfo =
-            initSkillInformation config.aptitude
+            Skill.initInformation Skill.Know_ config.aptitude
 
         noField =
-            Skill name skillInfo
+            Skill.init name skillInfo
 
         withField =
-            Skill (joinSkillName ( name, config.field )) skillInfo
+            Skill.init (Skill.nameFromField name config.field) skillInfo
     in
         case name of
-            Exotic _ ->
+            Skill.Exotic _ ->
                 withField
 
-            Hardware _ ->
+            Skill.Hardware _ ->
                 withField
 
-            Know_ _ ->
+            Skill.Know _ ->
                 withField
 
-            Medicine _ ->
+            Skill.Medicine _ ->
                 withField
 
-            Pilot _ ->
+            Skill.Pilot _ ->
                 withField
 
             _ ->
@@ -295,13 +194,13 @@ viewSkills skills =
 
 
 viewSkill : Skill -> Element Styles variation Msg
-viewSkill (Skill name info) =
+viewSkill (Skill.Skill name info) =
     let
         skillText =
-            skillNameText name
+            Skill.nameToString name
 
         aptitudeText =
-            toCode info.aptitude
+            Aptitude.toCode info.aptitude
     in
         el Styles.None
             []
@@ -322,15 +221,15 @@ viewSkillForm model =
                         { label = Input.hiddenLabel "Skill"
                         , with = model.skillSearch
                         , options = []
-                        , max = List.length skillsMap
+                        , max = List.length Skill.all
                         , menu =
                             Input.menu Styles.None
                                 []
-                                (List.map viewChoice skillsMap)
+                                (List.map viewChoice Skill.all)
                         }
                   ]
                 , viewSkillFormInput model <|
-                    Maybe.withDefault Athletics
+                    Maybe.withDefault Skill.defaultName
                         (Input.selected model.skillSearch)
                 , [ button Styles.None
                         [ onClick AddSkill
@@ -342,11 +241,11 @@ viewSkillForm model =
             )
 
 
-viewSkillFormInput : Model -> SkillName -> List (Element Styles variation Msg)
+viewSkillFormInput : Model -> Skill.Name -> List (Element Styles variation Msg)
 viewSkillFormInput model name =
     let
-        aptitudeChoice aptitude =
-            Input.choice aptitude (text <| toCode aptitude)
+        aptitudeChoice ( _, aptitude ) =
+            Input.choice aptitude (text <| Aptitude.toCode aptitude)
 
         noField =
             [ empty ]
@@ -374,31 +273,25 @@ viewSkillFormInput model name =
                         , menu =
                             Input.menu Styles.Border
                                 []
-                                [ aptitudeChoice Cognition
-                                , aptitudeChoice Intuition
-                                , aptitudeChoice Reflexes
-                                , aptitudeChoice Savvy
-                                , aptitudeChoice Somatics
-                                , aptitudeChoice Willpower
-                                ]
+                                (List.map aptitudeChoice Aptitude.all)
                         }
                      )
                    ]
     in
         case name of
-            Exotic _ ->
+            Skill.Exotic _ ->
                 withFieldAndAptitudes
 
-            Hardware _ ->
+            Skill.Hardware _ ->
                 withField
 
-            Know_ _ ->
+            Skill.Know _ ->
                 withField
 
-            Medicine _ ->
+            Skill.Medicine _ ->
                 withField
 
-            Pilot _ ->
+            Skill.Pilot _ ->
                 withField
 
             _ ->
@@ -413,247 +306,3 @@ main =
         , view = view
         , subscriptions = \_ -> Sub.none
         }
-
-
-joinSkillName : ( SkillName, Field ) -> SkillName
-joinSkillName ( name, field ) =
-    case name of
-        Exotic _ ->
-            Exotic field
-
-        Hardware _ ->
-            Hardware field
-
-        Know_ _ ->
-            Know_ field
-
-        Medicine _ ->
-            Medicine field
-
-        Pilot _ ->
-            Pilot field
-
-        _ ->
-            name
-
-
-skillAptitude : SkillName -> Aptitude -> Aptitude
-skillAptitude name default =
-    case name of
-        Athletics ->
-            Somatics
-
-        Deceive ->
-            Savvy
-
-        Exotic _ ->
-            default
-
-        Fray ->
-            Reflexes
-
-        FreeFall ->
-            Somatics
-
-        Guns ->
-            Reflexes
-
-        Hardware _ ->
-            Cognition
-
-        Infiltrate ->
-            Reflexes
-
-        Infosec ->
-            Cognition
-
-        Interface ->
-            Cognition
-
-        Kinesics ->
-            Savvy
-
-        Know_ _ ->
-            Cognition
-
-        Medicine _ ->
-            Cognition
-
-        Melee ->
-            Somatics
-
-        Perceive ->
-            Intuition
-
-        Persuade ->
-            Savvy
-
-        Pilot _ ->
-            Reflexes
-
-        Program ->
-            Cognition
-
-        Provoke ->
-            Savvy
-
-        Psi_ ->
-            Willpower
-
-        Research ->
-            Intuition
-
-        Survival ->
-            Intuition
-
-
-skillNameText : SkillName -> String
-skillNameText name =
-    case name of
-        Athletics ->
-            "Athletics"
-
-        Deceive ->
-            "Deceive"
-
-        Exotic exoticField ->
-            "Exotic: " ++ exoticField
-
-        Fray ->
-            "Fray"
-
-        FreeFall ->
-            "Free Fall"
-
-        Guns ->
-            "Guns"
-
-        Hardware hardwareField ->
-            "Hardware: " ++ hardwareField
-
-        Infiltrate ->
-            "Infiltrate"
-
-        Infosec ->
-            "Infosec"
-
-        Interface ->
-            "Interface"
-
-        Kinesics ->
-            "Kinesics"
-
-        Know_ knowField ->
-            "Know: " ++ knowField
-
-        Medicine medicineField ->
-            "Medicine: " ++ medicineField
-
-        Melee ->
-            "Melee"
-
-        Perceive ->
-            "Perceive"
-
-        Persuade ->
-            "Persuade"
-
-        Pilot pilotField ->
-            "Pilot: " ++ pilotField
-
-        Program ->
-            "Program"
-
-        Provoke ->
-            "Provoke"
-
-        Psi_ ->
-            "Psi"
-
-        Research ->
-            "Research"
-
-        Survival ->
-            "Survival"
-
-
-skillName : String -> Maybe SkillName
-skillName key =
-    skillsMap
-        |> List.map (\( k, v ) -> ( String.toLower k, v ))
-        |> Dict.fromList
-        |> Dict.get (String.toLower key)
-
-
-skillsMap : List ( String, SkillName )
-skillsMap =
-    [ ( "Athletics", Athletics )
-    , ( "Deceive", Deceive )
-    , ( "Exotic", Exotic "" )
-    , ( "Fray", Fray )
-    , ( "Free Fall", FreeFall )
-    , ( "Guns", Guns )
-    , ( "Hardware", Hardware "" )
-    , ( "Infiltrate", Infiltrate )
-    , ( "Infosec", Infosec )
-    , ( "Interface", Interface )
-    , ( "Kinesics", Kinesics )
-    , ( "Know", Know_ "" )
-    , ( "Medicine", Medicine "" )
-    , ( "Melee", Melee )
-    , ( "Perceive", Perceive )
-    , ( "Persuade", Persuade )
-    , ( "Pilot", Pilot "" )
-    , ( "Program", Program )
-    , ( "Provoke", Provoke )
-    , ( "Psi", Psi_ )
-    , ( "Research", Research )
-    , ( "Survival", Survival )
-    ]
-
-
-toCode : Aptitude -> String
-toCode aptitude =
-    case aptitude of
-        Cognition ->
-            "COG"
-
-        Intuition ->
-            "INT"
-
-        Reflexes ->
-            "REF"
-
-        Savvy ->
-            "SAV"
-
-        Somatics ->
-            "SOM"
-
-        Willpower ->
-            "WIL"
-
-
-fromCode : String -> Maybe Aptitude
-fromCode code =
-    case code of
-        "COG" ->
-            Just Cognition
-
-        "INT" ->
-            Just Intuition
-
-        "REF" ->
-            Just Reflexes
-
-        "SAV" ->
-            Just Savvy
-
-        "SOM" ->
-            Just Somatics
-
-        "WIL" ->
-            Just Willpower
-
-        _ ->
-            Nothing
